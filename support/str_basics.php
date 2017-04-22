@@ -20,7 +20,7 @@
 				else if (is_array($val))
 				{
 					$_REQUEST[$key] = array();
-					foreach ($val as $key2 => $val2)  $_REQUEST[$key][$key2] = self::ProcPOSTStr($val2);
+					foreach ($val as $key2 => $val2)  $_REQUEST[$key][$key2] = (is_string($val2) ? self::ProcPOSTStr($val2) : $val2);
 				}
 				else  $_REQUEST[$key] = $val;
 			}
