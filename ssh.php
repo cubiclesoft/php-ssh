@@ -89,7 +89,7 @@
 	require_once $rootpath . "/support/phpseclib/Net/SFTP.php";
 
 	$path = get_include_path();
-	if (strpos($path, ";" . $rootpath . "/support/phpseclib/") === false)  set_include_path($path . ";" . $rootpath . "/support/phpseclib/");
+	if (strpos($path, PATH_SEPARATOR . $rootpath . "/support/phpseclib/") === false)  set_include_path($path . PATH_SEPARATOR . $rootpath . "/support/phpseclib/");
 
 	function SSHKeysList()
 	{
