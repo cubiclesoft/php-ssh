@@ -146,7 +146,7 @@ class Net_SFTP_Stream
      *
      * @access public
      */
-    function Net_SFTP_Stream()
+    function __construct()
     {
         if (defined('NET_SFTP_STREAM_LOGGING')) {
             echo "__construct()\r\n";
@@ -197,7 +197,7 @@ class Net_SFTP_Stream
 
         if ($host[0] == '$') {
             $host = substr($host, 1);
-            global $$host;
+            global ${$host};
             if (!is_object($$host) || get_class($$host) != 'Net_SFTP') {
                 return false;
             }
