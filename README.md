@@ -3,6 +3,8 @@ PHP SSH Tools
 
 Manage SSH keys and connection profiles, and connect to SSH and SFTP servers with a 100% pure PHP-based command-line all-in-one solution.  MIT or LGPL.
 
+[![Donate](https://cubiclesoft.com/res/donate-shield.png)](https://cubiclesoft.com/donate/)
+
 Features
 --------
 
