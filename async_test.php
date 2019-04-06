@@ -49,6 +49,7 @@
 
 	var_dump($ssh->write("sleep 30\n"));
 
+	$startts = time();
 	$lastwints = time();
 	do
 	{
@@ -78,5 +79,11 @@
 
 			$lastwints = time();
 		}
-	} while ($ssh->isConnected());
+
+		if ($startts < time() - 60)
+		{
+			$ssh->write("exit\n");
+			$startts = time();
+		}
+	} while ($ssh->hasShell());
 ?>

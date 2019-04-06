@@ -34,6 +34,11 @@
 			$this->fsock_blocking = $block;
 		}
 
+		function hasShell()
+		{
+			return ($this->isConnected() && (($this->bitmap & NET_SSH2_MASK_SHELL) || $this->in_request_pty_exec === true));
+		}
+
 		// For use with a stream_select() call.
 		function wantWrite()
 		{
@@ -47,7 +52,7 @@
 				return false;
 			}
 
-			if (!($this->bitmap & NET_SSH2_MASK_SHELL) && $this->in_request_pty_exec !== true) {
+			if (!$this->hasShell()) {
 				user_error('Initiate an interactive shell session prior to calling sendWrite()');
 				return false;
 			}
@@ -87,7 +92,7 @@
 				return false;
 			}
 
-			if (!($this->bitmap & NET_SSH2_MASK_SHELL)) {
+			if (!$this->hasShell()) {
 				user_error('Initiate an interactive shell session prior to calling readAsync()');
 				return false;
 			}
@@ -111,9 +116,14 @@
 
 			if ($result === false)
 			{
-				if (feof($this->fsock))  return $this->_get_channel_packet($channel);
+				if (feof($this->fsock))
+				{
+					$result = $this->_get_channel_packet($channel);
 
-				return false;
+					$this->disconnect();
+				}
+
+				return $result;
 			}
 
 			return $this->_get_channel_packet($channel);
@@ -180,7 +190,7 @@
 				$response = $this->binary_packet_buffer;
 				$this->binary_packet_buffer = false;
 			} else {
-				if (!$this->async_read_peek_only) {
+				if ($this->fsock_blocking) {
 					$read = array($this->fsock);
 					$write = $except = null;
 
@@ -292,7 +302,9 @@
 									return false;
 								}
 								extract(unpack('Nlength', $this->_string_shift($response, 4)));
-								if (!$this->async_read_peek_only) {
+								if ($this->async_read_peek_only) {
+									return true;
+								} else {
 									if ($length) {
 										$this->errors[count($this->errors)].= "\r\n" . $this->_string_shift($response, $length);
 									}
@@ -409,6 +421,7 @@
 						return true;
 					}
 				case NET_SSH2_MSG_CHANNEL_EOF:
+					if ($this->async_read_peek_only)  return true;
 					break;
 				default:
 					user_error('Error reading channel data');
