@@ -64,6 +64,7 @@
 
 		$result = $ssh->readAsync();
 		if (is_string($result))  echo $result;
+		else if (feof($ssh->getStream()))  $ssh->disconnect();
 
 		// Update the window size every few seconds.
 		if ($lastwints < time() - 5)
