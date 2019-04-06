@@ -62,9 +62,13 @@
 
 		$ssh->sendWrite();
 
-		$result = $ssh->readAsync();
-		if (is_string($result))  echo $result;
-		else if (feof($ssh->getStream()))  $ssh->disconnect();
+		// Clear the read buffer.
+		do
+		{
+			$result = $ssh->readAsync();
+			if (is_string($result))  echo $result;
+			else if (feof($ssh->getStream()))  $ssh->disconnect();
+		} while (is_string($result));
 
 		// Update the window size every few seconds.
 		if ($lastwints < time() - 5)
