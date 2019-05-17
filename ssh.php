@@ -61,7 +61,7 @@
 		"connect" => "Initiate a SSH/SFTP connection"
 	);
 
-	$cmdgroup = CLI::GetLimitedUserInputWithArgs($args, "cmdgroup", "Command group", false, "Available command groups:", $cmdgroups, true, $suppressoutput);
+	$cmdgroup = CLI::GetLimitedUserInputWithArgs($args, false, "Command group", false, "Available command groups:", $cmdgroups, true, $suppressoutput);
 
 	// Get the command.
 	switch ($cmdgroup)
@@ -71,7 +71,7 @@
 		case "connect":  $cmds = array("test" => "Test connectivity", "run" => "Run one or more commands", "sequence" => "Run a set of commands stored in a file", "download" => "Download a file or directory", "upload" => "Upload a file or directory", "shell-php" => "Minimal interactive SSH shell in PHP", "shell-system" => "System SSH shell");  break;
 	}
 
-	$cmd = CLI::GetLimitedUserInputWithArgs($args, "cmd", "Command", false, "Available commands:", $cmds, true, $suppressoutput);
+	$cmd = CLI::GetLimitedUserInputWithArgs($args, false, "Command", false, "Available commands:", $cmds, true, $suppressoutput);
 
 	// Make sure directories exist.
 	@mkdir($rootpath . "/ssh-keys", 0700);
