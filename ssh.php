@@ -1,6 +1,6 @@
 <?php
 	// SSH tools in pure PHP.
-	// (C) 2016 CubicleSoft.  All Rights Reserved.
+	// (C) 2019 CubicleSoft.  All Rights Reserved.
 
 	if (!isset($_SERVER["argc"]) || !$_SERVER["argc"])
 	{
@@ -25,7 +25,7 @@
 			"suppressoutput" => array("arg" => false),
 			"help" => array("arg" => false)
 		),
-		"userinput" => "="
+		"allow_opts_after_param" => false
 	);
 	$args = CLI::ParseCommandLine($options);
 
@@ -42,7 +42,7 @@
 		echo "\n";
 		echo "Examples:\n";
 		echo "\tphp " . $args["file"] . "\n";
-		echo "\tphp " . $args["file"] . " keys create name=test bits=4096\n";
+		echo "\tphp " . $args["file"] . " keys create -name test -bits 4096\n";
 		echo "\tphp " . $args["file"] . " -s connect run myserver-root reboot\n";
 
 		exit();
@@ -51,6 +51,7 @@
 	// Check enabled extensions.
 	if (!extension_loaded("openssl"))  CLI::DisplayError("The 'openssl' PHP module is not enabled.  Please update the file '" . (php_ini_loaded_file() !== false ? php_ini_loaded_file() : "php.ini") . "' to enable the module.");
 
+	$origargs = $args;
 	$suppressoutput = (isset($args["opts"]["suppressoutput"]) && $args["opts"]["suppressoutput"]);
 
 	// Get the command group.
@@ -352,12 +353,35 @@
 		return array("success" => true, "results" => $results);
 	}
 
+	function ReinitArgs($newargs)
+	{
+		global $args;
+
+		// Process the parameters.
+		$options = array(
+			"shortmap" => array(
+				"?" => "help"
+			),
+			"rules" => array(
+			)
+		);
+
+		foreach ($newargs as $arg)  $options["rules"][$arg] = array("arg" => true, "multiple" => true);
+		$options["rules"]["help"] = array("arg" => false);
+
+		$args = CLI::ParseCommandLine($options, array_merge(array(""), $args["params"]));
+
+		if (isset($args["opts"]["help"]))  DisplayResult(array("success" => true, "options" => array_keys($options["rules"])));
+	}
+
 	if ($cmdgroup === "keys")
 	{
 		// SSH keys.
 		if ($cmd === "list")  DisplayResult(SSHKeysList());
 		else if ($cmd === "create")
 		{
+			ReinitArgs(array("name", "bits"));
+
 			do
 			{
 				$name = CLI::GetUserInputWithArgs($args, "name", "SSH key name", false, "", $suppressoutput);
@@ -410,6 +434,8 @@
 		}
 		else if ($cmd === "import")
 		{
+			ReinitArgs(array("publickey", "privatekey", "name"));
+
 			do
 			{
 				$valid = false;
@@ -486,6 +512,9 @@
 		}
 		else
 		{
+			if ($cmd === "export")  ReinitArgs(array("key", "path"));
+			else  ReinitArgs(array("key"));
+
 			$name = GetSSHKeyName();
 			$filename = $rootpath . "/ssh-keys/" . $name . ".json";
 
@@ -590,6 +619,8 @@
 		if ($cmd === "list")  DisplayResult(SSHProfilesList());
 		else if ($cmd === "create")
 		{
+			ReinitArgs(array("name", "host", "port", "username", "method", "key", "password"));
+
 			do
 			{
 				$name = CLI::GetUserInputWithArgs($args, "name", "SSH profile name", false, "", $suppressoutput);
@@ -646,6 +677,8 @@
 		}
 		else
 		{
+			ReinitArgs(array("profile"));
+
 			$name = GetSSHProfileName();
 			$filename = $rootpath . "/ssh-profiles/" . $name . ".json";
 
@@ -703,6 +736,12 @@
 	}
 	else if ($cmdgroup === "connect")
 	{
+		if ($cmd === "run")  ReinitArgs(array("profile", "run", "error"));
+		else if ($cmd === "sequence")  ReinitArgs(array("profile", "file"));
+		else if ($cmd === "shell-php")  ReinitArgs(array("profile", "run"));
+		else if ($cmd === "download" || $cmd === "upload")  ReinitArgs(array("profile", "src", "dest"));
+		else  ReinitArgs(array("profile"));
+
 		$name = GetSSHProfileName();
 		$filename = $rootpath . "/ssh-profiles/" . $name . ".json";
 		$data = json_decode(file_get_contents($filename), true);
