@@ -1,6 +1,6 @@
 <?php
 	// CubicleSoft command-line functions.
-	// (C) 2016 CubicleSoft.  All Rights Reserved.
+	// (C) 2018 CubicleSoft.  All Rights Reserved.
 
 	class CLI
 	{
@@ -8,7 +8,6 @@
 		{
 			if (!isset($options["shortmap"]))  $options["shortmap"] = array();
 			if (!isset($options["rules"]))  $options["rules"] = array();
-			if (!isset($options["userinput"]))  $options["userinput"] = false;
 			if (!isset($options["allow_opts_after_param"]))  $options["allow_opts_after_param"] = true;
 
 			// Clean up shortmap and rules.
@@ -41,7 +40,9 @@
 					}
 					else if ($currchr == "\"" || $currchr == "'")
 					{
-						$inside = ($inside === false ? $currchr : false);
+						if ($inside === false)  $inside = $currchr;
+						else if ($inside === $currchr)  $inside = false;
+						else  $currarg .= $currchr;
 					}
 					else if ($currchr == "\\" && $x < $y - 1)
 					{
@@ -57,7 +58,7 @@
 				if ($currarg != "")  $args[] = $currarg;
 			}
 
-			$result = array("success" => true, "file" => array_shift($args), "opts" => array(), "params" => array(), "userinput" => array());
+			$result = array("success" => true, "file" => array_shift($args), "opts" => array(), "params" => array());
 
 			// Look over shortmap to determine if options exist that are one byte (flags) and don't have arguments.
 			$chrs = array();
@@ -159,39 +160,18 @@
 				}
 			}
 
-			// Process user input split.
-			if ($options["userinput"] !== false && is_string($options["userinput"]))
-			{
-				$params = array();
-				foreach ($result["params"] as $arg)
-				{
-					$pos = stripos($arg, $options["userinput"]);
-					if ($pos === false)  $params[] = $arg;
-					else
-					{
-						$name = strtolower(substr($arg, 0, $pos));
-						$val = substr($arg, $pos + 1);
-
-						if (!isset($result["userinput"][$name]))  $result["userinput"][$name] = array();
-						$result["userinput"][$name][] = $val;
-					}
-				}
-
-				$result["params"] = $params;
-			}
-
 			return $result;
 		}
 
 		public static function CanGetUserInputWithArgs(&$args, $prefix)
 		{
-			return (($prefix !== false && isset($args["userinput"][$prefix]) && count($args["userinput"][$prefix])) || count($args["params"]));
+			return (($prefix !== false && isset($args["opts"][$prefix]) && is_array($args["opts"][$prefix]) && count($args["opts"][$prefix])) || count($args["params"]));
 		}
 
 		// Gets a line of input from the user.  If the user supplies all information via the command-line, this could be entirely automated.
 		public static function GetUserInputWithArgs(&$args, $prefix, $question, $default, $noparamsoutput = "", $suppressoutput = false, $callback = false, $callbackopts = false)
 		{
-			if (!count($args["params"]) && $noparamsoutput != "")
+			if (!self::CanGetUserInputWithArgs($args, $prefix) && $noparamsoutput != "")
 			{
 				echo "\n" . rtrim($noparamsoutput) . "\n\n";
 
@@ -203,9 +183,9 @@
 			{
 				$prompt = ($suppressoutput ? "" : $question . ($default !== false ? " [" . $default . "]" : "") . ":  ");
 
-				if ($prefix !== false && isset($args["userinput"][$prefix]) && count($args["userinput"][$prefix]))
+				if ($prefix !== false && isset($args["opts"][$prefix]) && is_array($args["opts"][$prefix]) && count($args["opts"][$prefix]))
 				{
-					$line = array_shift($args["userinput"][$prefix]);
+					$line = array_shift($args["opts"][$prefix]);
 					if ($line === "")  $line = $default;
 					if (!$suppressoutput)  echo $prompt . $line . "\n";
 				}
@@ -217,7 +197,10 @@
 				}
 				else if (strtoupper(substr(php_uname("s"), 0, 3)) != "WIN" && function_exists("readline") && function_exists("readline_add_history"))
 				{
-					$line = trim(readline($prompt));
+					$line = readline($prompt);
+					if ($line === false)  exit();
+
+					$line = trim($line);
 					if ($line === "")  $line = $default;
 					if ($line !== false && $line !== "")  readline_add_history($line);
 				}
@@ -225,16 +208,18 @@
 				{
 					echo $prompt;
 					$line = fgets(STDIN);
+					if ($line === false || ($line === "" && feof(STDIN)))  exit();
+
 					$line = trim($line);
 					if ($line === "")  $line = $default;
 				}
 
 				if ($line === false || (is_callable($callback) && !call_user_func_array($callback, array($line, &$callbackopts))))
 				{
-					if ($line === false)  echo "Please enter a value.\n";
-					else  $line = false;
+					if ($line !== false)  $line = false;
+					else  echo "Please enter a value.\n";
 
-					if (!count($args["params"]) && $noparamsoutput != "")
+					if (!self::CanGetUserInputWithArgs($args, $prefix) && $noparamsoutput != "")
 					{
 						echo "\n" . $noparamsoutput . "\n";
 
@@ -422,13 +407,19 @@
 			);
 		}
 
-		public static function DisplayTimer($msg)
+		public static function UpdateTimer()
 		{
 			$ts = microtime(true);
 			$diff = $ts - self::$timerinfo["diff"];
 			self::$timerinfo["diff"] = $ts;
 
-			echo $msg . " (Diff:  " . sprintf("%.2f", $diff) . ", Total:  " . sprintf("%.2f", $ts - self::$timerinfo["start"]) . ")\n";
+			$result = array(
+				"success" => true,
+				"diff" => sprintf("%.2f", $diff),
+				"total" => sprintf("%.2f", $ts - self::$timerinfo["start"])
+			);
+
+			return $result;
 		}
 	}
 ?>
