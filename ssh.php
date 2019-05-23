@@ -800,7 +800,11 @@
 			{
 				$ssh = new Net_SFTP($entry["host"], $entry["port"]);
 
-				$publickey = $ssh->getServerPublicHostKey();
+				if ($suppressoutput)  $publickey = @$ssh->getServerPublicHostKey();
+				else  $publickey = $ssh->getServerPublicHostKey();
+
+				if (!$ssh->isConnected())  DisplayResult(array("success" => false, "error" => "An error occurred while connecting to the SSH host '" . $entry["host"] . ":" . $entry["port"] . "'.", "errorcode" => "connect_failed"));
+
 				if (!isset($entry["server"]))
 				{
 					$rsa = new Crypt_RSA();
@@ -908,7 +912,7 @@
 					$run = CLI::GetUserInputWithArgs($args, "run", "", false, "", $suppressoutput);
 
 					$result = @$ssh->exec($run);
-					if ($result === false)  CLI::DisplayError("Sending the SSH command failed.\n\n" . implode("\n", $ssh->getErrors()), false, false);
+					if ($result === false)  CLI::DisplayError("Sending the SSH command failed:  " . $run . "\n\n" . implode("\n", $ssh->getErrors()), false, false);
 					else  echo $result;
 				} while ($run !== "exit" && $run !== "logout");
 
