@@ -18,10 +18,12 @@
 	// Process the command-line options.
 	$options = array(
 		"shortmap" => array(
+			"p" => "datapath",
 			"s" => "suppressoutput",
 			"?" => "help"
 		),
 		"rules" => array(
+			"datapath" => array("arg" => true),
 			"suppressoutput" => array("arg" => false),
 			"help" => array("arg" => false)
 		),
@@ -38,6 +40,7 @@
 		echo "\n";
 		echo "Syntax:  " . $args["file"] . " [options] [cmdgroup cmd [cmdoptions]]\n";
 		echo "Options:\n";
+		echo "\t-p   Data path.  Default is this tool's path.\n";
 		echo "\t-s   Suppress most output.  Useful for capturing JSON output.\n";
 		echo "\n";
 		echo "Examples:\n";
@@ -52,6 +55,7 @@
 	if (!extension_loaded("openssl"))  CLI::DisplayError("The 'openssl' PHP module is not enabled.  Please update the file '" . (php_ini_loaded_file() !== false ? php_ini_loaded_file() : "php.ini") . "' to enable the module.");
 
 	$origargs = $args;
+	$datapath = (isset($args["opts"]["datapath"]) ? $args["opts"]["datapath"] : $rootpath);
 	$suppressoutput = (isset($args["opts"]["suppressoutput"]) && $args["opts"]["suppressoutput"]);
 
 	// Get the command group.
@@ -74,12 +78,14 @@
 	$cmd = CLI::GetLimitedUserInputWithArgs($args, false, "Command", false, "Available commands:", $cmds, true, $suppressoutput);
 
 	// Make sure directories exist.
-	@mkdir($rootpath . "/ssh-keys", 0700);
-	@mkdir($rootpath . "/ssh-profiles", 0700);
-	@mkdir($rootpath . "/cache", 0700);
+	@mkdir($datapath . "/ssh-keys", 0700);
+	@mkdir($datapath . "/ssh-profiles", 0700);
+	@mkdir($datapath . "/cache", 0700);
 
 	function DisplayResult($result)
 	{
+		if (json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) === false)  unset($result["info"]);
+
 		echo json_encode($result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
 
 		exit();
@@ -94,10 +100,10 @@
 
 	function SSHKeysList()
 	{
-		global $rootpath;
+		global $datapath;
 
 		$result = array("success" => true, "data" => array());
-		$path = $rootpath . "/ssh-keys";
+		$path = $datapath . "/ssh-keys";
 		$dir = opendir($path);
 		if ($dir)
 		{
@@ -150,10 +156,10 @@
 
 	function SSHProfilesList()
 	{
-		global $rootpath;
+		global $datapath;
 
 		$result = array("success" => true, "data" => array());
-		$path = $rootpath . "/ssh-profiles";
+		$path = $datapath . "/ssh-profiles";
 		$dir = opendir($path);
 		if ($dir)
 		{
@@ -207,6 +213,15 @@
 		}
 
 		return $sshprofile;
+	}
+
+	function SSHExecHandler($str)
+	{
+		global $result, $suppressoutput;
+
+		$result .= $str;
+
+		if (!$suppressoutput)  echo $str;
 	}
 
 	function DownloadFile($ssh, $src, $dest, $info)
@@ -386,7 +401,7 @@
 			{
 				$name = CLI::GetUserInputWithArgs($args, "name", "SSH key name", false, "", $suppressoutput);
 				$name = Str::FilenameSafe($name);
-				$filename = $rootpath . "/ssh-keys/" . $name . ".json";
+				$filename = $datapath . "/ssh-keys/" . $name . ".json";
 				$found = file_exists($filename);
 				if ($found)  CLI::DisplayError("A SSH key with that name already exists.  The file '" . $filename . "' already exists.", false, false);
 			} while ($found);
@@ -445,6 +460,10 @@
 				{
 					$publickey = file_get_contents($filename);
 
+					// Add JSON support.
+					$data = @json_decode($publickey, true);
+					if (is_array($data) && isset($data["publickey"]))  $publickey = $data["publickey"];
+
 					$rsa = new Crypt_RSA();
 					if (!$rsa->loadKey($publickey))  CLI::DisplayError("The file '" . $filename . "' does not contain a valid public key.", false, false);
 					else
@@ -460,15 +479,19 @@
 				$valid = false;
 				$filename = CLI::GetUserInputWithArgs($args, "privatekey", "Private key filename", false, "To specify a password for the private key, enter filename|password where a vertical pipe separates the filename from the password.  Note that the private key will have password protection removed as this tool exists primarily for automation purposes.  You are expected to protect the host itself via other means (i.e. policies, procedures, people).", $suppressoutput);
 				$filename = explode("|", $filename, 2);
-				if (!file_exists($filename[0]))  CLI::DisplayError("The file '" . $filename . "' does not exist.", false, false);
+				if (!file_exists($filename[0]))  CLI::DisplayError("The file '" . $filename[0] . "' does not exist.", false, false);
 				else
 				{
 					$privatekey = file_get_contents($filename[0]);
 
+					// Add JSON support.
+					$data = @json_decode($privatekey, true);
+					if (is_array($data) && isset($data["privatekey"]))  $privatekey = $data["privatekey"];
+
 					$rsa = new Crypt_RSA();
 					$rsa->loadKey($publickey);
 					if (count($filename) > 1)  $rsa->setPassword($filename[1]);
-					if (!$rsa->loadKey($privatekey))  CLI::DisplayError("The file '" . $filename . "' does not contain a valid private key.", false, false);
+					if (!$rsa->loadKey($privatekey))  CLI::DisplayError("The file '" . $filename[0] . "' does not contain a valid private key.", false, false);
 					else
 					{
 						$rsa->setPassword(false);
@@ -482,7 +505,7 @@
 			{
 				$name = CLI::GetUserInputWithArgs($args, "name", "SSH key name", false, "", $suppressoutput);
 				$name = Str::FilenameSafe($name);
-				$filename = $rootpath . "/ssh-keys/" . $name . ".json";
+				$filename = $datapath . "/ssh-keys/" . $name . ".json";
 				$found = file_exists($filename);
 				if ($found)  CLI::DisplayError("A SSH key with that name already exists.  The file '" . $filename . "' already exists.", false, false);
 			} while ($found);
@@ -516,7 +539,7 @@
 			else  ReinitArgs(array("key"));
 
 			$name = GetSSHKeyName();
-			$filename = $rootpath . "/ssh-keys/" . $name . ".json";
+			$filename = $datapath . "/ssh-keys/" . $name . ".json";
 
 			if ($cmd === "get-info" || $cmd === "export")
 			{
@@ -625,7 +648,7 @@
 			{
 				$name = CLI::GetUserInputWithArgs($args, "name", "SSH profile name", false, "", $suppressoutput);
 				$name = Str::FilenameSafe($name);
-				$filename = $rootpath . "/ssh-profiles/" . $name . ".json";
+				$filename = $datapath . "/ssh-profiles/" . $name . ".json";
 				$found = file_exists($filename);
 				if ($found)  CLI::DisplayError("A SSH profile with that name already exists.  The file '" . $filename . "' already exists.", false, false);
 			} while ($found);
@@ -680,7 +703,7 @@
 			ReinitArgs(array("profile"));
 
 			$name = GetSSHProfileName();
-			$filename = $rootpath . "/ssh-profiles/" . $name . ".json";
+			$filename = $datapath . "/ssh-profiles/" . $name . ".json";
 
 			if ($cmd === "get-info")
 			{
@@ -743,7 +766,7 @@
 		else  ReinitArgs(array("profile"));
 
 		$name = GetSSHProfileName();
-		$filename = $rootpath . "/ssh-profiles/" . $name . ".json";
+		$filename = $datapath . "/ssh-profiles/" . $name . ".json";
 		$data = json_decode(file_get_contents($filename), true);
 
 		if (count($data["chain"]) > 1)  CLI::DisplayError("This software does not currently support starting more than one ssh process at a time.  Sorry.  Submit a working cross-platform patch?");
@@ -754,8 +777,8 @@
 			else if (is_file($rootpath . "/ssh-win32/ssh.exe"))  $ssh = $rootpath . "/ssh-win32/ssh.exe";
 			else  $ssh = "ssh";
 
-			file_put_contents($rootpath . "/cache/ssh_config", "");
-			$ssh .= " -F " . escapeshellarg($rootpath . "/cache/ssh_config") . " -o " . escapeshellarg("UserKnownHostsFile=" . $rootpath . "/cache/known_hosts");
+			file_put_contents($datapath . "/cache/ssh_config", "");
+			$ssh .= " -F " . escapeshellarg($datapath . "/cache/ssh_config") . " -o " . escapeshellarg("UserKnownHostsFile=" . $datapath . "/cache/known_hosts");
 
 			$ts = microtime(true);
 			foreach ($data["chain"] as $num => $entry)
@@ -763,7 +786,7 @@
 				// Export the private key to a file.
 				if ($entry["method"] === "ssh-key")
 				{
-					$filename = $rootpath . "/ssh-keys/" . $entry["ssh-key"] . ".json";
+					$filename = $datapath . "/ssh-keys/" . $entry["ssh-key"] . ".json";
 					if (!file_exists($filename))  CLI::DisplayError("SSH key '" . $entry["ssh-key"] . "' does not exist.  Filename '" . $filename . "' does not exist.");
 					$data2 = json_decode(file_get_contents($filename), true);
 
@@ -771,7 +794,7 @@
 					if (!$rsa->loadKey($data2["publickey"]))  CLI::DisplayError("An error occurred while loading the public key '" . $entry["ssh-key"] . "'.");
 					if (!$rsa->loadKey($data2["privatekey"]))  CLI::DisplayError("An error occurred while loading the private key '" . $entry["ssh-key"] . "'.");
 
-					$tempkeyfilename = $rootpath ."/cache/id_" . $entry["ssh-key"] . ".pem";
+					$tempkeyfilename = $datapath . "/cache/id_" . $entry["ssh-key"] . ".pem";
 					file_put_contents($tempkeyfilename, $rsa->getPrivateKey(CRYPT_RSA_PRIVATE_FORMAT_PKCS1));
 
 					$ssh .= " -i " . escapeshellarg($tempkeyfilename);
@@ -780,7 +803,7 @@
 				$ssh .= " -p " . (int)$entry["port"] . " " . escapeshellarg($entry["username"] . "@" . $entry["host"]);
 
 				system($ssh);
-				@unlink($rootpath . "/cache/ssh_config");
+				@unlink($datapath . "/cache/ssh_config");
 
 				if ($entry["method"] === "ssh-key")  @unlink($tempkeyfilename);
 			}
@@ -833,9 +856,9 @@
 
 				if ($entry["method"] === "ssh-key")
 				{
-					$filename = $rootpath . "/ssh-keys/" . $entry["ssh-key"] . ".json";
-					if (!file_exists($filename))  CLI::DisplayError("SSH key '" . $entry["ssh-key"] . "' does not exist.  Filename '" . $filename . "' does not exist.");
-					$data2 = json_decode(file_get_contents($filename), true);
+					$filename2 = $datapath . "/ssh-keys/" . $entry["ssh-key"] . ".json";
+					if (!file_exists($filename2))  CLI::DisplayError("SSH key '" . $entry["ssh-key"] . "' does not exist.  Filename '" . $filename2 . "' does not exist.");
+					$data2 = json_decode(file_get_contents($filename2), true);
 
 					$rsa = new Crypt_RSA();
 					if (!$rsa->loadKey($data2["publickey"]))  CLI::DisplayError("An error occurred while loading the public key '" . $entry["ssh-key"] . "'.");
@@ -884,13 +907,16 @@
 					}
 				}
 
+				$ssh->setTimeout(0);
+
 				$results = array();
 				foreach ($items as $item)
 				{
 					$ts = microtime(true);
 
-					$result = @$ssh->exec($item["run"]);
-					if ($result === false)  DisplayResult(array("success" => false, "error" => "Sending the SSH command failed.", "errorcode" => "command_failed", "info" => array("command" => $item["run"], "ssh_errors" => $ssh->getErrors()), "results" => $results));
+					$result = "";
+					$result2 = @$ssh->exec($item["run"], "SSHExecHandler");
+					if ($result2 === false)  DisplayResult(array("success" => false, "error" => "Sending the SSH command failed.", "errorcode" => "command_failed", "info" => array("command" => $item["run"], "ssh_errors" => $ssh->getErrors()), "results" => $results));
 					if ($item["error"] !== "" && stripos($result, $item["error"]) !== false)  DisplayResult(array("success" => false, "error" => "SSH command returned a detected error condition.", "errorcode" => "requested_error_string_detected", "info" => $result, "results" => $results));
 
 					$results[] = array("command" => $item["run"], "output" => $result, "time" => microtime(true) - $ts);
@@ -907,13 +933,16 @@
 			else if ($cmd === "shell-php")
 			{
 				$ts = microtime(true);
+
+				$ssh->setTimeout(0);
+
 				do
 				{
 					$run = CLI::GetUserInputWithArgs($args, "run", "", false, "", $suppressoutput);
 
-					$result = @$ssh->exec($run);
-					if ($result === false)  CLI::DisplayError("Sending the SSH command failed:  " . $run . "\n\n" . implode("\n", $ssh->getErrors()), false, false);
-					else  echo $result;
+					$result = "";
+					$result2 = @$ssh->exec($run, "SSHExecHandler");
+					if ($result2 === false)  CLI::DisplayError("Sending the SSH command failed:  " . $run . "\n\n" . implode("\n", $ssh->getErrors()), false, false);
 				} while ($run !== "exit" && $run !== "logout");
 
 				$result = array(
@@ -939,7 +968,7 @@
 
 				if ($info["type"] === NET_SFTP_TYPE_DIRECTORY)
 				{
-					$path = $rootpath . "/cache/" . Str::FilenameSafe($name . "-" . Str::ExtractFilename($src) . "-" . date("Ymd"));
+					$path = $datapath . "/cache/" . Str::FilenameSafe($name . "-" . Str::ExtractFilename($src) . "-" . date("Ymd"));
 
 					do
 					{
@@ -966,8 +995,8 @@
 						$filename = str_replace("\\", "/", $filename);
 						while (substr($filename, -1) === "/")  $filename = substr($filename, 0, -1);
 					}
-					if ($filename === false || $filename === $rootpath)  $filename = $rootpath . "/cache";
-					$rootpath .= "/" . Str::FilenameSafe(Str::ExtractFilename($src));
+					if ($filename === false || $filename === $datapath)  $filename = $datapath . "/cache";
+					$datapath .= "/" . Str::FilenameSafe(Str::ExtractFilename($src));
 
 					do
 					{
@@ -1028,7 +1057,7 @@
 						$dest = CLI::GetUserInputWithArgs($args, "dest", "Destination filename", $filename, "", $suppressoutput);
 						$dest = str_replace("\\", "/", $dest);
 						while (substr($dest, -1) === "/")  $dest = substr($dest, 0, -1);
-						$valid = (!file_exists($dest) || is_file($dest));
+						$valid = (!$ssh->file_exists($dest) || $ssh->is_file($dest));
 						if (!$valid)  CLI::DisplayError("The destination '" . $dest . "' exists but is not a file.", false, false);
 					} while (!$valid);
 
